@@ -1,0 +1,38 @@
+services:
+  db:
+    container_name: clickhouse
+    image: clickhouse/clickhouse-server
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ports:
+      - 9000:9000/tcp
+  echoip:
+    container_name: echoip
+    image: mpolden/echoip:latest
+    command: "-C 0 -p -r -H X-Forwarded-For -a /data/GeoLite2-ASN.mmdb -c /data/GeoLite2-City.mmdb -f /data/GeoLite2-Country.mmdb"
+    ports:
+      - 8080:8080
+    volumes:
+      - ./temp/data:/data:ro
+  maxmind:
+    image: maxmindinc/geoipupdate
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=
+      - GEOIPUPDATE_LICENSE_KEY=
+      - GEOIPUPDATE_EDITION_IDS=GeoLite2-ASN GeoLite2-City GeoLite2-Country
+    volumes:
+      - ./temp/data:/usr/share/GeoIP
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - ./temp/grafana-storage:/var/lib/grafana
+
+volumes:
+  clickhouse_data:

@@ -1,0 +1,58 @@
+services:
+  db:
+    container_name: clickhouse
+    image: clickhouse/clickhouse-server
+    restart: unless-stopped
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+    volumes:
+      - ./db:/var/lib/clickhouse
+  echoip:
+    container_name: echoip
+    image: mpolden/echoip:latest
+    restart: unless-stopped
+    command: "-C 0 -p -r -H X-Forwarded-For -a /data/GeoLite2-ASN.mmdb -c /data/GeoLite2-City.mmdb -f /data/GeoLite2-Country.mmdb"
+    volumes:
+      - ./data:/data:ro
+  maxmind:
+    image: maxmindinc/geoipupdate
+    restart: no
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=
+      - GEOIPUPDATE_LICENSE_KEY=
+      - GEOIPUPDATE_EDITION_IDS=GeoLite2-ASN GeoLite2-City GeoLite2-Country
+    volumes:
+      - ./data:/usr/share/GeoIP
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: unless-stopped
+    user: "0"
+    volumes:
+      - ./grafana-storage:/var/lib/grafana
+  migrate:
+    image: ghcr.io/gaetandezeiraud/vortex-migrate:latest
+    depends_on:
+      - db
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+    restart: "no"
+    command: ["./migrate"]
+  vortex-api:
+    image: ghcr.io/gaetandezeiraud/vortex:latest
+    depends_on:
+      - db
+    restart: unless-stopped
+    environment:
+      - ECHOIP_HOST=http://echoip:8080
+      - CLICKHOUSE_HOST=clickhouse:9000
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - ALLOWED_TENANTS=alpha,beta,gamma
+    ports:
+      - 9876:9876

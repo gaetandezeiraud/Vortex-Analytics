@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<clickhouse>
+
+    <query_log remove="0">
+        <database>system</database>
+        <table>query_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 7 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <query_thread_log remove="0">
+        <database>system</database>
+        <table>query_thread_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 3 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_thread_log>
+
+    <text_log remove="0">
+        <database>system</database>
+        <table>text_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_time + INTERVAL 3 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </text_log>
+
+    <part_log remove="0">
+        <database>system</database>
+        <table>part_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 14 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+
+    <metric_log remove="0">
+        <database>system</database>
+        <table>metric_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 1 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </metric_log>
+
+    <asynchronous_metric_log remove="0">
+        <database>system</database>
+        <table>asynchronous_metric_log</table>
+        <engine>MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 1 DAY</engine>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </asynchronous_metric_log>
+
+</clickhouse>
