@@ -32,7 +32,7 @@ services:
     volumes:
       - ./grafana-storage:/var/lib/grafana
   migrate:
-    image: ghcr.io/gaetandezeiraud/vortex-migrate:latest
+    image: ghcr.io/gaetandezeiraud/vortex-analytics:latest
     depends_on:
       - db
     environment:
@@ -43,7 +43,7 @@ services:
     restart: "no"
     command: ["./migrate"]
   vortex-api:
-    image: ghcr.io/gaetandezeiraud/vortex:latest
+    image: ghcr.io/gaetandezeiraud/vortex-analytics:latest
     depends_on:
       - db
     restart: unless-stopped
