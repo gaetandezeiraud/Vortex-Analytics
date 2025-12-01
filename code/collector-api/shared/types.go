@@ -1,7 +1,6 @@
 package shared
 
 import (
-	"time"
 	"fmt"
 )
 
@@ -40,18 +39,4 @@ type Tracking struct {
 
 type BatchedTracks struct {
 	Tracks []Tracking `json:"tracks"`
-}
-
-type Event struct {
-	ID         int64
-	TenantID   string
-	SessionID  string
-	Name       string
-	Value      string
-	UserID     string
-	AppVersion string
-	Platform   string
-	Country    string
-	Region     string
-	Timestamp  time.Time
 }
