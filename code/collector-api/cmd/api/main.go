@@ -52,7 +52,7 @@ func main() {
 	// HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
-	mux.HandleFunc("/valid", valid)
+	mux.HandleFunc("/health", health)
 	mux.HandleFunc("/track", track)
 	mux.HandleFunc("/batch", trackBatch)
 
@@ -68,32 +68,7 @@ func index(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(w, "Vortex collector-api %s", version)
 }
 
-func valid(w http.ResponseWriter, r *http.Request) {
-	if !isJSONRequest(w, r) {
-		return
-	}
-
-	body, err := readBody(w, r)
-	if err != nil {
-		return
-	}
-
-	var trk shared.Tracking
-	if err := json.Unmarshal(body, &trk); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-		return
-	}
-
-	if err := trk.Action.Validate(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if !isValidTenant(trk.TenantID) {
-		http.Error(w, "Invalid or unauthorized tenant", http.StatusForbidden)
-		return
-	}
-
+func health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
