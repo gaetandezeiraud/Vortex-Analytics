@@ -100,7 +100,7 @@ public class AnalyticsManager : Singleton<AnalyticsManager>
             "application/json");
 
             HttpClient httpClient = new HttpClient();
-            var response = await httpClient.PostAsync(URL + "/valid", jsonContent);
+            var response = await httpClient.PostAsync(URL + "/health", jsonContent);
 
             _serverAlive = response.IsSuccessStatusCode;
         }

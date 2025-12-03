@@ -118,7 +118,7 @@ public class AnalyticsManager : MonoBehaviour
                 "application/json");
 
             HttpClient httpClient = new HttpClient();
-            var response = await httpClient.PostAsync(_url + "/valid", jsonContent);
+            var response = await httpClient.PostAsync(_url + "/health", jsonContent);
 
             _serverAlive = response.IsSuccessStatusCode;
         }
