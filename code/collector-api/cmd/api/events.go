@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 	"vortex/shared"
@@ -79,5 +80,7 @@ func (e *Events) flush() {
 		})
 	}
 
-	_ = e.store.InsertBatch(context.Background(), batch)
+	if err := e.store.InsertBatch(context.Background(), batch); err != nil {
+		fmt.Println("ERROR inserting batch:", err)
+	}
 }
