@@ -1,17 +1,14 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 
 public class AnalyticsManager : MonoBehaviour
 {
     [System.Serializable]
-    public class ValueWrapper
-    {
-        public string data;
-    }
+    public class ValueWrapper { public string data; }
 
     [System.Serializable]
     public class TrackingData
@@ -37,18 +34,32 @@ public class AnalyticsManager : MonoBehaviour
         public List<Tracking> tracks = new List<Tracking>();
     }
 
-    // Variables
     public static AnalyticsManager Instance { get; private set; }
+
+    [SerializeField] private bool _initializeOnStart = true;
 
     [SerializeField] private string _tenantId;
     [SerializeField] private string _url;
     [SerializeField] private string _platform;
+
+    [Header("Auto-Flush Settings (Doesn't consern the manual batching API)")]
+    [Tooltip("If true, all events are queued until a manual Flush or timer Flush occurs.")]
+    [SerializeField] private bool _autoBatching = false;
+    [SerializeField] private float _autoFlushInterval = 10f;
+
     private string _identity;
     private string _sessionId;
     private string _appVersion;
 
-    private bool _serverAlive = true;
-    private BatchedTracks _batchedTracks = new BatchedTracks();
+    private bool _isServerChecked;
+    private bool _serverAlive;
+    private bool _initialized;
+
+    private readonly List<Tracking> _internalQueue = new List<Tracking>();
+    private BatchedTracks _manualBatchedTracks = new BatchedTracks();
+
+    private readonly object _lock = new object();
+    private Coroutine _autoFlushRoutine;
 
     private void Awake()
     {
@@ -60,200 +71,227 @@ public class AnalyticsManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
-    }
 
-    private void OnDestroy()
-    {
-        if (Instance == this)
-            Instance = null;
-    }
-
-    private void Start()
-    {
-#if ENABLE_ANALYTICS
-            var identity = GetVortexString();
-            if (string.IsNullOrEmpty(identity) == true)
-            {
-                identity = Guid.NewGuid().ToString();
-                SetVortexString(identity);
-            }
-            _identity = identity;
-
-            _sessionId = Guid.NewGuid().ToString();
-            _appVersion = Application.version;
-
-            Task.Run(async () => await CheckServerAvailabilityAsync()); // Check server status at startup
-#endif
+        if (_initializeOnStart)
+            Initialize();
     }
 
     public void Init(string tenantId, string url, string platform)
     {
+        if (_initialized) return;
+
         _tenantId = tenantId;
         _url = url;
         _platform = platform;
+
+        Initialize();
     }
 
-    public void NewSessionId()
+    private void Initialize()
     {
+        if (_initialized) return;
+
+        _initialized = true;
+        InitSession();
+
+#if ENABLE_ANALYTICS
+        StartCoroutine(CheckServerAvailability());
+        _autoFlushRoutine = StartCoroutine(AutoFlushRoutine());
+#endif
+    }
+
+    private void InitSession()
+    {
+        _identity = PlayerPrefs.GetString("device_identity", Guid.NewGuid().ToString());
+        PlayerPrefs.SetString("device_identity", _identity);
         _sessionId = Guid.NewGuid().ToString();
+        _appVersion = Application.version;
     }
-
-    private void SetVortexString(string value)
-    {
-        PlayerPrefs.SetString("device_identity", value);
-    }
-
-    private string GetVortexString()
-    {
-        return PlayerPrefs.GetString("device_identity", null);
-    }
-
-    private async Task CheckServerAvailabilityAsync()
-    {
-        try
-        {
-            using StringContent jsonContent = new(
-                JsonUtility.ToJson(CreateTracking("", "")),
-                Encoding.UTF8,
-                "application/json");
-
-            HttpClient httpClient = new HttpClient();
-            var response = await httpClient.PostAsync(_url + "/health", jsonContent);
-
-            _serverAlive = response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            Debug.LogError("Vortex Server is not reachable.");
-            _serverAlive = false;
-        }
-    }
-
 
     private Tracking CreateTracking(string name, string value)
     {
-        Tracking tracking = new Tracking();
-        tracking.tenant_id = _tenantId;
-
-        TrackingData trackingData = new TrackingData();
-        trackingData.name = name;
-        trackingData.value = value;
-        trackingData.identity = _identity;
-        trackingData.session_id = _sessionId;
-        trackingData.platform = _platform;
-        trackingData.app_version = _appVersion;
-
-        tracking.tracking = trackingData;
-        return tracking;
+        return new Tracking
+        {
+            tenant_id = _tenantId,
+            tracking = new TrackingData
+            {
+                name = name,
+                value = value,
+                identity = _identity,
+                session_id = _sessionId,
+                platform = _platform,
+                app_version = _appVersion
+            }
+        };
     }
 
-    private async Task PostAsync(string name, string value)
+    // Networking
+    private IEnumerator CheckServerAvailability()
     {
-        try
-        {
-            string json = JsonUtility.ToJson(CreateTracking(name, value));
+        if (string.IsNullOrEmpty(_url)) yield break;
 
-            using StringContent jsonContent = new(json, Encoding.UTF8, "application/json");
+        using UnityWebRequest request = UnityWebRequest.Get(_url + "/health");
+        request.timeout = 5;
 
-            HttpClient httpClient = new HttpClient();
-            await httpClient.PostAsync(_url + "/track", jsonContent);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Analytics error: " + ex.Message);
-        }
+        yield return request.SendWebRequest();
+
+        _serverAlive = request.result == UnityWebRequest.Result.Success;
+        _isServerChecked = true;
+
+        if (_serverAlive && !_autoBatching && _internalQueue.Count > 0)
+            StartCoroutine(FlushInternalQueue());
     }
 
-    public async Task PostBatchAsync()
+    private UnityWebRequest CreateRequest(string url, string json)
     {
-        if (!_serverAlive)
-            return;
-
-        try
-        {
-            using StringContent jsonContent = new(
-                JsonUtility.ToJson(_batchedTracks),
-                Encoding.UTF8,
-                "application/json");
-            _batchedTracks.tracks.Clear();
-
-            HttpClient httpClient = new HttpClient();
-            await httpClient.PostAsync(_url + "/batch", jsonContent);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Analytics error: " + ex.Message);
-        }
+        var request = new UnityWebRequest(url, "POST");
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+        return request;
     }
 
-    public void TrackEvent(string eventName)
+    // Sending
+    private IEnumerator PostSingle(Tracking tracking)
     {
-        if (!_serverAlive)
-            return;
+        string json = JsonUtility.ToJson(tracking);
+        using UnityWebRequest request = CreateRequest(_url + "/track", json);
+        yield return request.SendWebRequest();
+    }
 
+    public void FlushManualBatch() 
+    {
 #if ENABLE_ANALYTICS
-            _ = PostAsync(eventName, "");
+        StartCoroutine(PostBatchRoutine());
 #endif
     }
 
-    public void TrackEvent(string eventName, string props)
+    private IEnumerator PostBatchRoutine()
     {
-        if (!_serverAlive)
-            return;
+        if (!_serverAlive || _manualBatchedTracks.tracks.Count == 0) yield break;
 
-#if ENABLE_ANALYTICS
-            string wrapped = JsonUtility.ToJson(new ValueWrapper { data = props });
-            _ = PostAsync(eventName, wrapped);
-#endif
+        string json;
+        lock (_lock)
+        {
+            json = JsonUtility.ToJson(_manualBatchedTracks);
+            _manualBatchedTracks.tracks.Clear();
+        }
+
+        using UnityWebRequest request = CreateRequest(_url + "/batch", json);
+        yield return request.SendWebRequest();
     }
 
+    private IEnumerator FlushInternalQueue()
+    {
+        if (_internalQueue.Count == 0) yield break;
+
+        List<Tracking> toSend;
+        lock (_lock)
+        {
+            toSend = new List<Tracking>(_internalQueue);
+            _internalQueue.Clear();
+        }
+
+        BatchedTracks batch = new BatchedTracks { tracks = toSend };
+        string json = JsonUtility.ToJson(batch);
+
+        using UnityWebRequest request = CreateRequest(_url + "/batch", json);
+        yield return request.SendWebRequest();
+    }
+
+    private IEnumerator AutoFlushRoutine()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(_autoFlushInterval);
+            
+            if (_serverAlive && _internalQueue.Count > 0)
+                yield return FlushInternalQueue();
+        }
+    }
+
+    // Public methods
     public void TrackEvent(string eventName, Dictionary<string, object> props)
     {
-        if (!_serverAlive)
+#if ENABLE_ANALYTICS
+        if (!_serverAlive && _isServerChecked && !_autoBatching)
             return;
 
-#if ENABLE_ANALYTICS
-            Task.Run(() =>
-            {
-                var serializedProps = JsonUtility.ToJson(props);
-                _ = PostAsync(eventName, serializedProps);
-            });
+        string serializedProps = JsonUtility.ToJson(props); 
+        ProcessTrackEvent(eventName, serializedProps);
 #endif
     }
 
-    
-    public void BatchedTrackEvent(string eventName)
+    public void TrackEvent(string eventName, string props = "")
     {
-        if (!_serverAlive)
+#if ENABLE_ANALYTICS
+        if (!_serverAlive && _isServerChecked && !_autoBatching)
             return;
 
-#if ENABLE_ANALYTICS
-        _batchedTracks.tracks.Add(CreateTracking(eventName, ""));
+        string wrapped = string.IsNullOrEmpty(props) ? "" : JsonUtility.ToJson(new ValueWrapper { data = props });
+        ProcessTrackEvent(eventName, wrapped);
 #endif
     }
 
-    public void BatchedTrackEvent(string eventName, string props)
+    private void ProcessTrackEvent(string eventName, string value)
     {
-        if (!_serverAlive)
-            return;
-
-#if ENABLE_ANALYTICS
-        string wrapped = JsonUtility.ToJson(new ValueWrapper { data = props });
-        _batchedTracks.tracks.Add(CreateTracking(eventName, wrapped));
-#endif
+        Tracking tracking = CreateTracking(eventName, value);
+        lock (_lock)
+        {
+            if (!_isServerChecked || _autoBatching)
+                _internalQueue.Add(tracking);
+            else
+                StartCoroutine(PostSingle(tracking));
+        }
     }
 
     public void BatchedTrackEvent(string eventName, Dictionary<string, object> props)
     {
-        if (!_serverAlive)
-            return;
-
 #if ENABLE_ANALYTICS
-        Task.Run(() =>
-        {
-            var serializedProps = JsonUtility.ToJson(props);
-            _batchedTracks.tracks.Add(CreateTracking(eventName, serializedProps));
-        });
+        if (!_serverAlive) return;
+        string serializedProps = JsonUtility.ToJson(props);
+        lock (_lock) { _manualBatchedTracks.tracks.Add(CreateTracking(eventName, serializedProps)); }
 #endif
+    }
+
+    public void BatchedTrackEvent(string eventName, string props = "")
+    {
+#if ENABLE_ANALYTICS
+        if (!_serverAlive) return;
+        lock (_lock) { _manualBatchedTracks.tracks.Add(CreateTracking(eventName, props)); }
+#endif
+    }
+
+    // Lifecycle
+    private void OnApplicationQuit()
+    {
+        FlushAllBeforeClosing();
+    }
+
+    // Useful for mobile when the app is pushed to the background
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus)
+        {
+            FlushAllBeforeClosing();
+        }
+    }
+
+    private void FlushAllBeforeClosing()
+    {
+        lock (_lock)
+        {
+            if (_internalQueue.Count > 0)
+            {
+                _manualBatchedTracks.tracks.AddRange(_internalQueue);
+                _internalQueue.Clear();
+            }
+        }
+
+        if (_manualBatchedTracks.tracks.Count == 0) return;
+        StartCoroutine(PostBatchRoutine());
+        
+        Debug.Log("[Analytics] Attempting final flush before exit...");
     }
 }

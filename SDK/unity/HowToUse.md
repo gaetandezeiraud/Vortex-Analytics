@@ -1,39 +1,29 @@
+# AnalyticsManager Documentation
 
-AnalyticsManager is a Unity component responsible for sending analytics events to a remote server.   
+`AnalyticsManager` is a Unity component responsible for sending analytics events to a remote server.  
 It supports:
-- Single events
-- Events
-- Batched events
-- Automatic device identity, session IDs, version tracking
 
-> At startup, the system performs a health check to verify whether the analytics API is reachable.
-If the API is not available, analytics will be disabled for the entire session to avoid performance degradation caused by repeated timeouts.
+- Immediate event tracking  
+- Batched event tracking  
+- Automatic retry when the server becomes available  
+- Session and device identification  
+- Manual or automatic initialization
 
-# Setup
+## Initialization
 
-You have two ways to configure the analytics system:
+### Automatic Initialization (Recommended)
 
-## Setup via Unity Inspector (Recommended)
+Attach the `AnalyticsManager` component to a GameObject and configure:
 
-Attach the AnalyticsManager component to a GameObject, then set:
+- **Tenant ID**
+- **Server URL**
+- **Platform**
 
-```
-Tenant ID
-Server URL
-Platform
-```
+When `Initialize On Start` is enabled, the system initializes automatically during `Awake()`.
 
-Example:
+### Manual Initialization
 
-```
-Tenant ID: mygame
-URL: https://analytics.myserver.com
-Platform: STEAM
-```
-
-## Setup via Script using Init()
-
-If you want to configure it dynamically: 
+If you need to initialize analytics at runtime (e.g., after login):
 
 ```csharp
 AnalyticsManager.Instance.Init(
@@ -43,54 +33,82 @@ AnalyticsManager.Instance.Init(
 );
 ```
 
-Call this before tracking any events.
+⚠️ This must be called before sending any events.
 
-# Tracking Events
-## Simple event (no properties)
+### Internal Behavior
+
+On initialization, the system:
+1. Generates or loads a persistent device identifier
+2. Creates a new session ID
+3. Performs a server health check
+4. Enables or disables analytics based on server availability
+
+If the server is unreachable, events are safely queued until connectivity is restored.
+
+## Tracking Events
+
+### Simple Event
 
 ```csharp
 AnalyticsManager.Instance.TrackEvent("app_started");
 ```
 
-## Event with string value
+### Event with String Payload
 
 ```csharp
-AnalyticsManager.Instance.TrackEvent("page", "themes");
+AnalyticsManager.Instance.TrackEvent("menu_opened", "settings");
 ```
 
-## Event with dictionary
+### Event with Structured Data
 
 ```csharp
-AnalyticsManager.Instance.TrackEvent("LevelCompleted", {
+AnalyticsManager.Instance.TrackEvent("level_completed", new Dictionary<string, object>
+{
     { "level", 5 },
     { "difficulty", "Hard" },
     { "time", 123.4f }
 });
 ```
 
-# Batched Events
+### Manual Batching
+Manual batching allows you to explicitly control when analytics events are sent.
 
-Batched events are stored and sent later using PostBatchAsync().
-
-## Event to batch
+#### Add Events to Batch
 
 ```csharp
 AnalyticsManager.Instance.BatchedTrackEvent("EnemyKilled");
+
+AnalyticsManager.Instance.BatchedTrackEvent(
+    "ItemCrafted",
+    new Dictionary<string, object>
+    {
+        { "item", "MagicSword" },
+        { "rarity", "Epic" }
+    }
+);
 ```
 
-Or 
+#### Send Batched Events
 
 ```csharp
-AnalyticsManager.Instance.BatchedTrackEvent("ItemCrafted", {
-    { "item", "MagicSword" },
-    { "rarity", "Epic" }
-});
+AnalyticsManager.Instance.FlushManualBatch();
 ```
 
-##  Send all batched events
+All queued events will be sent in a single request.
 
-```csharp
-await AnalyticsManager.Instance.PostBatchAsync();
-```
+## Automatic Batching
 
-After sending, the batch is automatically cleared.
+When Auto Batching is enabled:
+
+- Events are queued automatically
+- The system sends batches every Auto Flush Interval seconds
+
+If the server is unreachable, events remain queued.
+
+##  Lifecycle Handling
+
+Analytics are flushed automatically when:
+- The application loses focus (mobile background)
+- The application is quitting
+
+This ensures minimal data loss.
