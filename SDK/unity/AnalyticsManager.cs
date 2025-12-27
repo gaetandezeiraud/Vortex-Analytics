@@ -36,7 +36,7 @@ public class AnalyticsManager : MonoBehaviour
 
     public static AnalyticsManager Instance { get; private set; }
 
-    [SerializeField] private bool _initializeOnStart = true;
+    [SerializeField] private bool _initializeOnAwake = true;
 
     [SerializeField] private string _tenantId;
     [SerializeField] private string _url;
@@ -72,7 +72,7 @@ public class AnalyticsManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        if (_initializeOnStart)
+        if (_initializeOnAwake)
             Initialize();
     }
 
@@ -96,7 +96,6 @@ public class AnalyticsManager : MonoBehaviour
 
 #if ENABLE_ANALYTICS
         StartCoroutine(CheckServerAvailability());
-        _autoFlushRoutine = StartCoroutine(AutoFlushRoutine());
 #endif
     }
 
@@ -138,8 +137,22 @@ public class AnalyticsManager : MonoBehaviour
         _serverAlive = request.result == UnityWebRequest.Result.Success;
         _isServerChecked = true;
 
-        if (_serverAlive && !_autoBatching && _internalQueue.Count > 0)
-            StartCoroutine(FlushInternalQueue());
+        if (_serverAlive)
+        {
+            if (_autoBatching && _autoFlushRoutine == null)
+                _autoFlushRoutine = StartCoroutine(AutoFlushRoutine());
+
+            if (!_autoBatching && _internalQueue.Count > 0)
+                StartCoroutine(FlushInternalQueue());
+        }
+        else
+        {
+            if (_autoFlushRoutine != null)
+            {
+                StopCoroutine(_autoFlushRoutine);
+                _autoFlushRoutine = null;
+            }
+        }
     }
 
     private UnityWebRequest CreateRequest(string url, string json)
