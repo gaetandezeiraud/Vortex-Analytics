@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"vortex/shared"
 
@@ -59,8 +64,41 @@ func main() {
 	// CORS support
 	handler := cors.Default().Handler(mux)
 
-	log.Println("Listening on :9876")
-	log.Fatal(http.ListenAndServe(":9876", handler))
+	srv := &http.Server{
+		Addr:    ":9876",
+		Handler: handler,
+	}
+
+	// On shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	// Execute server in goroutine to allow graceful shutdown
+	go func() {
+		log.Println("Listening on :9876")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Listen error: %s\n", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	sig := <-stop
+	log.Printf("Signal received (%v). Starting graceful shutdown...\n", sig)
+
+	// Shutdown the HTTP server first (stop accepting new requests)
+	// Give the server a 5-second grace period to finish active requests
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("HTTP server shutdown failed: %+v", err)
+	}
+	log.Println("HTTP server stopped.")
+
+	// Flush ClickHouse buffers
+	events.Stop()
+
+	log.Println("Vortex shutdown successfully.")
 }
 
 // Handlers

@@ -18,12 +18,15 @@ type Events struct {
 	ch    chan TrackingWithGeo
 	buf   []TrackingWithGeo
 	mu    sync.Mutex
+	done  chan struct{} // Channel to signal shutdown
+	wg    sync.WaitGroup
 }
 
 func NewEvents(store shared.DataStore) *Events {
 	return &Events{
 		store: store,
 		ch:    make(chan TrackingWithGeo, 2000),
+		done:  make(chan struct{}),
 	}
 }
 
@@ -49,6 +52,11 @@ func (e *Events) Run() {
 
 		case <-ticker.C:
 			e.flush()
+
+		case <-e.done:
+			fmt.Println("Shutting down Events processor, flushing remaining data...")
+			e.flush()
+			return
 		}
 	}
 }
@@ -82,4 +90,8 @@ func (e *Events) flush() {
 	if err := e.store.InsertBatch(context.Background(), batch); err != nil {
 		fmt.Println("ERROR inserting batch:", err)
 	}
+}
+
+func (e *Events) Stop() {
+	close(e.done)
 }
