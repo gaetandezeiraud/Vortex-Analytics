@@ -40,11 +40,11 @@ func (e *Events) Run() {
 		case item := <-e.ch:
 			e.mu.Lock()
 			e.buf = append(e.buf, item)
-			needsFlush := len(e.buf) >= 15
-			e.mu.Unlock()
-
-			if needsFlush {
+			if len(e.buf) >= 5000 {
+				e.mu.Unlock()
 				e.flush()
+			} else {
+				e.mu.Unlock()
 			}
 
 		case <-ticker.C:
@@ -61,11 +61,10 @@ func (e *Events) flush() {
 	}
 
 	tmp := e.buf
-	e.buf = nil
+	e.buf = make([]TrackingWithGeo, 0, 5000) // Reset buffer but keep capacity
 	e.mu.Unlock()
 
 	batch := make([]shared.EventRecord, 0, len(tmp))
-
 	for _, x := range tmp {
 		batch = append(batch, shared.EventRecord{
 			TenantID:   x.Trk.TenantID,
