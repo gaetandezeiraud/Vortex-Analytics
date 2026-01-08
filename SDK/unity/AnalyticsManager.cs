@@ -39,7 +39,7 @@ public class AnalyticsManager : MonoBehaviour
     [SerializeField] private bool _initializeOnAwake = true;
 
     [SerializeField] private string _tenantId;
-    [SerializeField] private string _url;
+    [SerializeField] private string _url = "https://in.vortexanalytics.io";
     [SerializeField] private string _platform;
 
     [Header("Auto-Flush Settings (Doesn't consern the manual batching API)")]
