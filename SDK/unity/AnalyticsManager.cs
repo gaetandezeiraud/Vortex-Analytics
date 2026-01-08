@@ -97,6 +97,8 @@ public class AnalyticsManager : MonoBehaviour
 #if ENABLE_ANALYTICS
         StartCoroutine(CheckServerAvailability());
 #endif
+
+        TrackEvent("app_started");
     }
 
     private void InitSession()
