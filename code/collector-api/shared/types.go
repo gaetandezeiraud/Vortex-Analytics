@@ -2,15 +2,17 @@ package shared
 
 import (
 	"fmt"
+	"time"
 )
 
 type TrackingData struct {
-	Name       string `json:"name"`
-	Value      string `json:"value"`
-	Identity   string `json:"identity"`
-	SessionID  string `json:"session_id"`
-	Platform   string `json:"platform"`
-	AppVersion string `json:"app_version"`
+	Name       string    `json:"name"`
+	Value      string    `json:"value"`
+	Identity   string    `json:"identity"`
+	SessionID  string    `json:"session_id"`
+	Platform   string    `json:"platform"`
+	AppVersion string    `json:"app_version"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 func (t *TrackingData) Validate() error {

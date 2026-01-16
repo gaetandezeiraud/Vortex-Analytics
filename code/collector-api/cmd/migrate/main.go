@@ -57,7 +57,7 @@ func ensureTable(store *shared.ClickHouseStore) error {
 		platform String,
 		country String NOT NULL,
 		region String NOT NULL,
-		timestamp DateTime DEFAULT now()
+		timestamp DateTime64(3) DEFAULT now()
 	)
 	ENGINE = MergeTree()
 	PARTITION BY toYYYYMMDD(timestamp)

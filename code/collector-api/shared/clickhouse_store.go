@@ -42,8 +42,8 @@ func (c *ClickHouseStore) InsertBatch(ctx context.Context, records []EventRecord
 		INSERT INTO events
 		(
 			tenant_id, session_id, name, value, identity, 
-			app_version, platform, country, region
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			app_version, platform, country, region, timestamp
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	batch, err := c.DB.PrepareBatch(ctx, qry)
@@ -69,6 +69,7 @@ func (c *ClickHouseStore) InsertBatch(ctx context.Context, records []EventRecord
 			r.Platform,
 			r.Country,
 			r.Region,
+			r.Timestamp,
 		)
 		if err != nil {
 			return err

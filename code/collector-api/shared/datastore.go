@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"time"
 )
 
 type EventRecord struct {
@@ -15,6 +16,7 @@ type EventRecord struct {
 	Platform   string
 	Country    string
 	Region     string
+	Timestamp  time.Time
 }
 
 type DataStore interface {

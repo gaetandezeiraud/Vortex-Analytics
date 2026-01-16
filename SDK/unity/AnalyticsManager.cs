@@ -19,6 +19,7 @@ public class AnalyticsManager : MonoBehaviour
         public string session_id;
         public string platform;
         public string app_version;
+        public string timestamp;
     }
 
     [System.Serializable]
@@ -121,7 +122,8 @@ public class AnalyticsManager : MonoBehaviour
                 identity = _identity,
                 session_id = _sessionId,
                 platform = _platform,
-                app_version = _appVersion
+                app_version = _appVersion,
+                timestamp = DateTime.UtcNow.ToString("o") // ISO 8601 format
             }
         };
     }
