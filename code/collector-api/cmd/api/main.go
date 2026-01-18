@@ -198,6 +198,11 @@ func trackBatch(w http.ResponseWriter, r *http.Request) {
 
 		trk.Action.SessionID = shared.DeterministicGUID(trk.Action.Identity, trk.Action.SessionID)
 
+		// If client didn't provide a timestamp, use server time
+		if trk.Action.Timestamp.IsZero() {
+			trk.Action.Timestamp = time.Now().UTC()
+		}
+
 		events.Add(trk, geo)
 	}
 

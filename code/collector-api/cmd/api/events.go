@@ -84,6 +84,7 @@ func (e *Events) flush() {
 			Platform:   x.Trk.Action.Platform,
 			Country:    x.Geo.Country,
 			Region:     x.Geo.RegionName,
+			Timestamp:  x.Trk.Action.Timestamp,
 		})
 	}
 
